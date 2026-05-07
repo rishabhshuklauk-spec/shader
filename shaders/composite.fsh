@@ -2,8 +2,6 @@
 
 /*
 const int colortex0Format = RGB16;
-const int colortex1Format = RGB16;
-const int colortex2Format = RGB16;
 */
 
 uniform sampler2D colortex0;
@@ -40,19 +38,6 @@ vec3 distort(vec3 pos) {
 	return pos;
 }
 
-float getPCFShadow(vec3 shadowScreenPos, float bias) {
-	float shadow = 0.0;
-	float texelSize = 1.0 / 2048.0;
-
-	for(int x = -1; x <= 1; x++) {
-		for(int y = -1; y <= 1; y++) {
-			vec2 offset = vec2(float(x), float(y)) * texelSize;
-			shadow += step(shadowScreenPos.z - bias, texture(shadowtex0, shadowScreenPos.xy + offset).r);
-		}
-	}
-	return shadow / 9.0;
-}
-
 void main() {
 	vec2 lightmap = texture(colortex1, texcoord).xy;
 	lightmap = clamp((lightmap - (1.0 / 32.0)) * (32.0 / 30.0), 0.0, 1.0);
@@ -66,9 +51,7 @@ void main() {
 	color.rgb = pow(color.rgb, vec3(2.2));
 
 	float depth = texture(depthtex0, texcoord).r;
-	if (depth == 1.0) {
-		return;
-	}
+	if (depth == 1.0) return;
 
 	vec3 ndcPos = vec3(texcoord.xy, depth) * 2.0 - 1.0;
 	vec3 viewPos = projectAndDivide(gbufferProjectionInverse, ndcPos);
@@ -76,25 +59,18 @@ void main() {
 	vec3 shadowViewPos = (shadowModelView * vec4(feetPlayerPos, 1.0)).xyz;
 	vec4 shadowClipPos = shadowProjection * vec4(shadowViewPos, 1.0);
 
+	shadowClipPos.z -= 0.001;
 	shadowClipPos.xyz = distort(shadowClipPos.xyz);
+
 	vec3 shadowNdcPos = shadowClipPos.xyz / shadowClipPos.w;
 	vec3 shadowScreenPos = shadowNdcPos * 0.5 + 0.5;
 
-	float NdotL = clamp(dot(normal, lightVector), 0.0, 1.0);
-	float bias = mix(0.005, 0.0005, NdotL);
-
-	float shadow = 1.0;
-	if (shadowScreenPos.x > 0.0 && shadowScreenPos.x < 1.0 &&
-	shadowScreenPos.y > 0.0 && shadowScreenPos.y < 1.0 &&
-	shadowScreenPos.z > 0.0 && shadowScreenPos.z < 1.0) {
-
-		shadow = getPCFShadow(shadowScreenPos, bias);
-	}
+	float shadow = step(shadowScreenPos.z, texture(shadowtex0, shadowScreenPos.xy).r);
 
 	vec3 blocklight = lightmap.x * blocklightColor;
 	vec3 skylight = lightmap.y * skylightColor;
 	vec3 ambient = ambientColor;
-	vec3 sunlight = sunlightColor * NdotL * shadow * lightmap.y;
+	vec3 sunlight = sunlightColor * clamp(dot(worldLightVector, normal), 0.0, 1.0) * shadow * lightmap.y;
 
 	color.rgb *= blocklight + skylight + ambient + sunlight;
 }
