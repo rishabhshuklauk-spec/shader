@@ -1,6 +1,7 @@
 #version 330 compatibility
 
 uniform sampler2D colortex0;
+uniform sampler2D colortex1;
 
 in vec2 texcoord;
 layout(location = 0) out vec4 color;
@@ -16,6 +17,12 @@ vec3 acesTonemap(vec3 x) {
 
 void main() {
     vec3 clr = texture(colortex0, texcoord).rgb;
+    vec3 bloom = texture(colortex1, texcoord).rgb;
+
+    clr += bloom * 0.8;
+
+    float lum = dot(clr, vec3(0.2126, 0.7152, 0.0722));
+    clr = mix(vec3(lum), clr, 1.1);
 
     clr = acesTonemap(clr);
 
