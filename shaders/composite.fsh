@@ -14,11 +14,7 @@ uniform mat4 shadowProjection;
 uniform int worldTime;
 uniform int isEyeInWater;
 
-uniform float isJungle;
-uniform float isSavanna;
-uniform float isSwamp;
-uniform float isDesert;
-uniform float isCold;
+uniform vec3 fogColor;
 
 in vec2 texcoord;
 layout(location = 0) out vec4 color;
@@ -70,21 +66,26 @@ void main() {
 	color = texture(colortex0, texcoord);
 	color.rgb = pow(color.rgb, vec3(2.2));
 
+	float luma = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
+	color.rgb = mix(vec3(luma), color.rgb, 0.75);
+
 	float depth = texture(depthtex0, texcoord).r;
 	vec3 ndcPos = vec3(texcoord.xy, depth) * 2.0 - 1.0;
 	vec3 viewPos = projectAndDivide(gbufferProjectionInverse, ndcPos);
 	vec3 feetPlayerPos = (gbufferModelViewInverse * vec4(viewPos, 1.0)).xyz;
 	float distanceToPlayer = length(viewPos);
 
+	bool isHand = distanceToPlayer < 1.5;
+
 	if (isEyeInWater == 1) {
 		vec3 waterFogColor = vec3(0.02, 0.25, 0.45);
-		float fogFactor = exp(-pow(distanceToPlayer * 0.03, 1.5));
+		float wFogFactor = exp(-pow(distanceToPlayer * 0.03, 1.5));
 
 		vec3 underwaterAmbient = vec3(0.1, 0.35, 0.6) * lightmap.y;
 		vec3 underwaterBlock = vec3(1.0, 0.7, 0.3) * lightmap.x;
 		color.rgb *= (underwaterAmbient + underwaterBlock + 0.05);
 
-		color.rgb = mix(waterFogColor, color.rgb, clamp(fogFactor, 0.0, 1.0));
+		color.rgb = mix(waterFogColor, color.rgb, clamp(wFogFactor, 0.0, 1.0));
 		color.rgb = ACESFilm(color.rgb * 0.85);
 		return;
 	}
@@ -103,20 +104,26 @@ void main() {
 	float bias = mix(0.002, 0.0005, NdotL);
 
 	float shadow = 1.0;
-	if (shadowScreenPos.x > 0.0 && shadowScreenPos.x < 1.0 && shadowScreenPos.y > 0.0 && shadowScreenPos.y < 1.0) {
+	if (!isHand && shadowScreenPos.x > 0.0 && shadowScreenPos.x < 1.0 && shadowScreenPos.y > 0.0 && shadowScreenPos.y < 1.0) {
 		shadow = getPCFShadow(shadowScreenPos, bias);
 	}
-	shadow = mix(0.25, 1.0, shadow);
+	shadow = mix(0.35, 1.0, shadow);
 
 	vec3 sunlightColor = mix(vec3(0.01, 0.02, 0.03), vec3(1.15, 1.05, 0.95), dayBlend);
-	sunlightColor = mix(sunlightColor, vec3(1.4, 0.55, 0.2), sunsetBlend);
-	vec3 skylightColor = mix(vec3(0.01, 0.02, 0.04), vec3(0.2, 0.4, 0.6), dayBlend);
+	sunlightColor = mix(sunlightColor, vec3(1.8, 0.7, 0.2), sunsetBlend);
 
-	vec3 blocklight = lightmap.x * vec3(1.0, 0.6, 0.25);
+	vec3 skylightColor = mix(vec3(0.01, 0.02, 0.04), vec3(0.2, 0.4, 0.6), dayBlend);
+	skylightColor = mix(skylightColor, vec3(0.3, 0.15, 0.25), sunsetBlend);
+
+	vec3 ambient = mix(vec3(0.02), vec3(0.05, 0.06, 0.08), dayBlend);
+	ambient = mix(ambient, vec3(0.09, 0.05, 0.05), sunsetBlend);
+
+	vec3 blocklight = lightmap.x * vec3(1.0, 0.65, 0.25);
 	vec3 skylight = lightmap.y * skylightColor;
-	vec3 ambient = mix(vec3(0.01), vec3(0.03, 0.04, 0.06), dayBlend);
 
 	float wrappedLight = dot(worldLightVector, normal) * 0.5 + 0.5;
+	if (isHand) wrappedLight = 1.0;
+
 	vec3 sunlight = sunlightColor * clamp(wrappedLight, 0.0, 1.0) * shadow * lightmap.y;
 
 	color.rgb *= (blocklight + skylight + ambient + sunlight);
@@ -125,33 +132,27 @@ void main() {
 	float sunDot = clamp(dot(viewDir, viewLightVector), 0.0, 1.0);
 	float upDot = clamp(viewDir.y, 0.0, 1.0);
 
+	vec3 nativeFog = pow(fogColor, vec3(2.2));
+
 	vec3 skyZenith = mix(vec3(0.01, 0.015, 0.02), vec3(0.08, 0.25, 0.55), dayBlend);
-	vec3 skyHorizon = mix(vec3(0.02, 0.025, 0.03), vec3(0.50, 0.65, 0.80), dayBlend);
+	skyZenith = mix(skyZenith, vec3(0.12, 0.05, 0.18), sunsetBlend);
 
-	skyHorizon = mix(skyHorizon, vec3(0.40, 0.60, 0.50) * dayBlend, isJungle);
-	skyHorizon = mix(skyHorizon, vec3(0.70, 0.60, 0.45) * dayBlend, isSavanna);
-	skyHorizon = mix(skyHorizon, vec3(0.25, 0.30, 0.20) * dayBlend, isSwamp);
-	skyHorizon = mix(skyHorizon, vec3(0.75, 0.65, 0.50) * dayBlend, isDesert);
-	skyHorizon = mix(skyHorizon, vec3(0.50, 0.65, 0.85) * dayBlend, isCold);
+	vec3 skyHorizon = mix(vec3(0.02, 0.025, 0.03), nativeFog * 1.5, dayBlend);
+	skyHorizon = mix(skyHorizon, vec3(1.2, 0.45, 0.15), sunsetBlend);
 
-	skyHorizon = mix(skyHorizon, vec3(0.85, 0.40, 0.15), sunsetBlend);
+	float glowSpread = mix(8.0, 4.0, sunsetBlend);
+	float glowIntensity = mix(0.8, 1.8, sunsetBlend);
+	vec3 sunGlow = sunlightColor * pow(sunDot, glowSpread) * glowIntensity;
 
-	vec3 sunGlow = sunlightColor * pow(sunDot, 10.0) * 1.0;
 	vec3 customSky = mix(skyHorizon, skyZenith, pow(upDot, 0.5)) + sunGlow;
 
 	if (depth == 1.0) {
-		color.rgb = ACESFilm(customSky * 0.85);
+		color.rgb = ACESFilm(customSky * 0.9);
 		return;
 	}
 
-	float fogBase = 0.004;
-	fogBase = mix(fogBase, 0.007, isJungle);
-	fogBase = mix(fogBase, 0.005, isSavanna);
-	fogBase = mix(fogBase, 0.010, isSwamp);
-	fogBase = mix(fogBase, 0.002, isDesert);
+	float atmoFogFactor = exp(-pow(distanceToPlayer * 0.0025, 2.0));
+	color.rgb = mix(customSky, color.rgb, clamp(atmoFogFactor, 0.0, 1.0));
 
-	float fogFactor = exp(-pow(distanceToPlayer * fogBase, 2.0));
-	color.rgb = mix(customSky, color.rgb, clamp(fogFactor, 0.0, 1.0));
-
-	color.rgb = ACESFilm(color.rgb * 0.85);
+	color.rgb = ACESFilm(color.rgb * 0.9);
 }
