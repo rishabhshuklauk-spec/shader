@@ -3,6 +3,7 @@
 /* RENDERTARGETS: 0,1,2 */
 
 uniform sampler2D gtexture;
+uniform vec4 entityColor;
 
 in vec2 texcoord;
 in vec2 lmcoord;
@@ -14,11 +15,12 @@ layout(location = 1) out vec4 lightmap;
 layout(location = 2) out vec4 normalData;
 
 void main() {
-	color = texture(gtexture, texcoord) * glcolor;
-	if (color.a < 0.1) {
-		discard;
-	}
+	vec4 texColor = texture(gtexture, texcoord) * glcolor;
+	if (texColor.a < 0.1) discard;
 
+	texColor.rgb = mix(texColor.rgb, entityColor.rgb, entityColor.a);
+
+	color = texColor;
 	lightmap = vec4(lmcoord, 0.0, 1.0);
 	normalData = vec4(normal * 0.5 + 0.5, 1.0);
 }

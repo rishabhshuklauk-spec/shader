@@ -74,14 +74,14 @@ void main() {
 		float NdotH = max(dot(waterNormal, halfVector), 0.0);
 		float specular = pow(NdotH, 400.0) * 1.5;
 
-		vec3 waterColor = vec3(0.05, 0.45, 0.65);
+		vec3 waterColor = vec3(0.08, 0.50, 0.70);
 		vec3 skyReflect = vec3(0.40, 0.65, 0.95);
 		float NdotL = max(dot(waterNormal, worldLightDir), 0.0);
 
 		vec3 finalColor = mix(waterColor, skyReflect, fresnel * 0.9);
 		finalColor += vec3(1.0, 0.98, 0.95) * specular * NdotL;
 
-		float depthAlpha = mix(0.15, 0.85, fresnel);
+		float depthAlpha = mix(0.45, 0.90, fresnel);
 
 		texColor.rgb = finalColor;
 		texColor.a = depthAlpha;

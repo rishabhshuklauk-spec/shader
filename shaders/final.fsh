@@ -1,32 +1,33 @@
 #version 330 compatibility
 
 uniform sampler2D colortex0;
-uniform sampler2D colortex1;
-
 in vec2 texcoord;
 layout(location = 0) out vec4 color;
 
-vec3 acesTonemap(vec3 x) {
-    float a = 2.51;
-    float b = 0.03;
-    float c = 2.43;
-    float d = 0.59;
-    float e = 0.14;
-    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
-}
-
 void main() {
-    vec3 clr = texture(colortex0, texcoord).rgb;
-    vec3 bloom = texture(colortex1, texcoord).rgb;
+    vec3 baseColor = texture(colortex0, texcoord).rgb;
 
-    clr += bloom * 0.8;
+    vec3 bloom = vec3(0.0);
+    vec2 blurDir = vec2(0.5) - texcoord;
+    blurDir = normalize(blurDir);
 
-    float lum = dot(clr, vec3(0.2126, 0.7152, 0.0722));
-    clr = mix(vec3(lum), clr, 1.1);
+    float weightSum = 0.0;
+    for (int i = -6; i <= 6; i++) {
+        float weight = exp(-float(i * i) / 12.0);
+        vec2 sampleCoord = texcoord + blurDir * (float(i) * 0.008);
 
-    clr = acesTonemap(clr);
+        if (sampleCoord.x < 0.0 || sampleCoord.x > 1.0 || sampleCoord.y < 0.0 || sampleCoord.y > 1.0) continue;
 
-    clr = pow(clr, vec3(1.0 / 2.2));
+        vec3 sampleColor = texture(colortex0, sampleCoord).rgb;
+        float luma = dot(sampleColor, vec3(0.2126, 0.7152, 0.0722));
 
-    color = vec4(clr, 1.0);
+        float brightPass = smoothstep(0.95, 1.0, luma);
+
+        bloom += sampleColor * brightPass * weight;
+        weightSum += weight;
+    }
+
+    if (weightSum > 0.0) bloom /= weightSum;
+
+    color = vec4(baseColor + bloom * 0.45, 1.0);
 }
