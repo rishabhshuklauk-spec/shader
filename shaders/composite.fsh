@@ -4,11 +4,13 @@ uniform sampler2D colortex0;
 uniform sampler2D colortex1;
 uniform sampler2D colortex2;
 uniform sampler2D depthtex0;
+uniform sampler2D depthtex1;
 uniform sampler2D shadowtex0;
 
 uniform vec3 shadowLightPosition;
 uniform mat4 gbufferModelViewInverse;
 uniform mat4 gbufferProjectionInverse;
+uniform mat4 gbufferProjection;
 uniform mat4 shadowModelView;
 uniform mat4 shadowProjection;
 uniform int worldTime;
@@ -16,6 +18,12 @@ uniform int isEyeInWater;
 
 uniform int heldBlockLightValue;
 uniform int heldBlockLightValue2;
+
+uniform float rainStrength;
+uniform float frameTimeCounter;
+
+uniform vec3 skyColor;
+uniform vec3 fogColor;
 
 uniform float isJungle;
 uniform float isSavanna;
@@ -58,8 +66,22 @@ float getPCFShadow(vec3 shadowScreenPos, float bias) {
 	return shadow / 25.0;
 }
 
+float hash(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+
+float noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
+	mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
 void main() {
 	float rawDepth = texture(depthtex0, texcoord).r;
+	float opaqueDepth = texture(depthtex1, texcoord).r;
+
 	vec3 ndcPos = vec3(texcoord.xy, rawDepth) * 2.0 - 1.0;
 	vec3 viewPos = projectAndDivide(gbufferProjectionInverse, ndcPos);
 	float distanceToPlayer = length(viewPos);
@@ -142,52 +164,149 @@ void main() {
 	if (shadowScreenPos.x > 0.0 && shadowScreenPos.x < 1.0 && shadowScreenPos.y > 0.0 && shadowScreenPos.y < 1.0) {
 		shadow = getPCFShadow(shadowScreenPos, bias);
 	}
-	shadow = mix(mix(0.2, 0.05, nightBlend), 1.0, shadow);
+	shadow = mix(mix(0.40, 0.15, nightBlend), 1.0, shadow);
 
-	vec3 lightColor = vec3(1.15, 1.05, 0.95) * dayBlend
-	+ vec3(1.6, 0.65, 0.15) * twilightBlend
-	+ vec3(0.02, 0.05, 0.1) * nightBlend;
+	vec3 lightColor = vec3(1.2, 1.1, 1.0) * dayBlend
+	+ vec3(1.3, 0.8, 0.4) * twilightBlend
+	+ vec3(0.08, 0.12, 0.20) * nightBlend;
 
-	vec3 ambientColor = vec3(0.06, 0.08, 0.12) * dayBlend
-	+ vec3(0.12, 0.08, 0.06) * twilightBlend
-	+ vec3(0.02, 0.03, 0.05) * nightBlend;
+	vec3 ambientColor = vec3(0.15, 0.18, 0.22) * dayBlend
+	+ vec3(0.15, 0.12, 0.14) * twilightBlend
+	+ vec3(0.08, 0.10, 0.14) * nightBlend;
 
-	ambientColor = mix(ambientColor, vec3(0.10, 0.08, 0.05), hotBiome * dayBlend);
+	ambientColor = mix(ambientColor, vec3(0.18, 0.15, 0.12), hotBiome * dayBlend);
 
 	vec3 blocklight = lightmap.x * vec3(1.2, 0.8, 0.4);
 
-	vec3 skylightColor = vec3(0.25, 0.4, 0.6) * dayBlend + vec3(0.1, 0.05, 0.08) * twilightBlend + vec3(0.01, 0.015, 0.02) * nightBlend;
+	vec3 skylightColor = vec3(0.4, 0.5, 0.7) * dayBlend + vec3(0.2, 0.15, 0.18) * twilightBlend + vec3(0.05, 0.08, 0.12) * nightBlend;
 	vec3 skylight = lightmap.y * skylightColor;
 
 	float wrappedLight = dot(viewLightVector, normal) * 0.5 + 0.5;
 	vec3 directLight = lightColor * clamp(wrappedLight, 0.0, 1.0) * shadow * lightmap.y;
-	vec3 baseLight = vec3(0.015);
+	vec3 baseLight = mix(vec3(0.03), vec3(0.08), nightBlend);
 
 	float handLight = max(float(heldBlockLightValue), float(heldBlockLightValue2)) / 15.0;
 	if (handLight > 0.0) {
-		float handAtten = exp(-pow(distanceToPlayer * 0.18, 2.0));
+		float handAtten = clamp(1.0 - (distanceToPlayer / 15.0), 0.0, 1.0);
+		handAtten = handAtten * handAtten * (3.0 - 2.0 * handAtten);
+
+		vec3 dirToPlayer = normalize(-viewPos);
+		float surfaceAngle = clamp(dot(normal, dirToPlayer), 0.0, 1.0);
+		float wrappedAngle = surfaceAngle * 0.6 + 0.4;
+
 		vec3 torchColor = vec3(1.4, 0.85, 0.35) * handLight;
-		directLight += torchColor * handAtten;
+		directLight += torchColor * handAtten * wrappedAngle;
 	}
 
 	color.rgb *= (blocklight + skylight + ambientColor + directLight + baseLight);
 
 	vec3 viewDir = normalize(viewPos);
+
+	float marchDist = min(distanceToPlayer, 64.0);
+	int steps = 12;
+	float stepSize = marchDist / float(steps);
+	float dither = fract(sin(dot(texcoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+	vec3 marchPos = viewDir * (dither * stepSize);
+	float volumetrics = 0.0;
+
+	for(int i = 0; i < steps; i++) {
+		marchPos += viewDir * stepSize;
+		vec3 worldM = (gbufferModelViewInverse * vec4(marchPos, 1.0)).xyz;
+		vec3 sView = (shadowModelView * vec4(worldM, 1.0)).xyz;
+		vec4 sClip = shadowProjection * vec4(sView, 1.0);
+		sClip.xyz = distort(sClip.xyz);
+		vec3 sScreen = sClip.xyz / sClip.w * 0.5 + 0.5;
+
+		if(sScreen.x > 0.0 && sScreen.x < 1.0 && sScreen.y > 0.0 && sScreen.y < 1.0) {
+			float sDepth = texture(shadowtex0, sScreen.xy).r;
+			volumetrics += step(sScreen.z - 0.002, sDepth);
+		}
+	}
+	volumetrics /= float(steps);
+	vec3 godRays = lightColor * volumetrics * 0.18 * dayBlend * lightmap.y;
+
+	color.rgb += godRays;
+
+	bool isWater = (rawDepth < opaqueDepth - 0.0001) && (normal.y > 0.8);
+
+	float puddleNoise = noise(feetPlayerPos.xz * 0.8 + frameTimeCounter * 0.05);
+	puddleNoise = smoothstep(0.4, 0.6, puddleNoise);
+	float puddleMask = puddleNoise * rainStrength * clamp(normal.y, 0.0, 1.0);
+
+	if (!isWater && puddleMask > 0.0) {
+		color.rgb *= mix(1.0, 0.45, puddleMask);
+	}
+
+	float reflectMask = clamp(puddleMask + (isWater ? 1.0 : 0.0), 0.0, 1.0);
+
+	if (reflectMask > 0.0 && rawDepth != 1.0) {
+		vec3 rDir = normalize(reflect(viewDir, normal));
+		vec3 rayPos = viewPos;
+
+		vec3 ssrColor = vec3(0.0);
+		float ssrHit = 0.0;
+
+		int rSteps = 24;
+		float rStepSize = 0.5;
+		vec3 marchRDir = rDir * rStepSize;
+
+		rayPos += marchRDir * dither;
+
+		for(int i = 0; i < rSteps; i++) {
+			rayPos += marchRDir;
+			vec4 p = gbufferProjection * vec4(rayPos, 1.0);
+			p.xyz /= p.w;
+			vec2 sPos = p.xy * 0.5 + 0.5;
+
+			if(sPos.x < 0.0 || sPos.x > 1.0 || sPos.y < 0.0 || sPos.y > 1.0) break;
+
+			float d = texture(depthtex0, sPos).r;
+			vec3 ndcHit = vec3(sPos, d) * 2.0 - 1.0;
+			vec3 hitView = projectAndDivide(gbufferProjectionInverse, ndcHit);
+
+			float depthDiff = rayPos.z - hitView.z;
+			if (depthDiff > 0.0 && depthDiff < 1.5) {
+				ssrColor = texture(colortex0, sPos).rgb;
+				ssrColor = pow(ssrColor, vec3(2.2));
+				ssrHit = 1.0;
+				break;
+			}
+		}
+
+		if (ssrHit == 0.0) {
+			vec3 worldRDir = mat3(gbufferModelViewInverse) * rDir;
+			float rUpDot = clamp(worldRDir.y, 0.0, 1.0);
+			vec3 skyReflect = mix(fogColor, skyColor, clamp(rUpDot * 2.5, 0.0, 1.0));
+
+			vec3 rightV = normalize(cross(worldLightVector, vec3(0.0, 1.0, 0.0)));
+			if (abs(worldLightVector.y) > 0.99) rightV = vec3(1.0, 0.0, 0.0);
+			vec3 upV = cross(rightV, worldLightVector);
+			float dx = dot(worldRDir, rightV);
+			float dy = dot(worldRDir, upV);
+			float dz = dot(worldRDir, worldLightVector);
+
+			float sSize = 0.035;
+			float sEdge = 0.0015;
+			float squareBody = (1.0 - smoothstep(sSize - sEdge, sSize, abs(dx))) * (1.0 - smoothstep(sSize - sEdge, sSize, abs(dy))) * step(0.0, dz);
+
+			vec3 celestialColor = mix(vec3(1.2, 1.1, 1.0), vec3(0.4, 0.6, 1.0), nightBlend);
+			float sunGlow = pow(max(dz, 0.0), mix(60.0, 40.0, dayBlend)) * mix(0.8, 0.25, nightBlend);
+
+			skyReflect += (squareBody + sunGlow) * celestialColor;
+			ssrColor = skyReflect;
+		}
+
+		float fresnel = clamp(1.0 - dot(-viewDir, normal), 0.0, 1.0);
+		fresnel = pow(fresnel, 5.0);
+		float finalReflect = mix(0.05, 0.9, fresnel) * reflectMask;
+
+		color.rgb = mix(color.rgb, ssrColor, finalReflect);
+	}
+
 	vec3 worldViewDir = normalize(mat3(gbufferModelViewInverse) * viewDir);
 	float upDot = clamp(worldViewDir.y, 0.0, 1.0);
 
-	vec3 zenithDay = mix(vec3(0.1, 0.25, 0.55), vec3(0.08, 0.20, 0.40), hotBiome);
-	vec3 skyZenith = zenithDay * dayBlend
-	+ vec3(0.15, 0.20, 0.35) * twilightBlend
-	+ vec3(0.02, 0.04, 0.08) * nightBlend;
-
-	vec3 horizonDay = mix(vec3(0.35, 0.55, 0.85), vec3(0.7, 0.6, 0.45), isSavanna);
-	horizonDay = mix(horizonDay, vec3(0.8, 0.7, 0.5), isDesert);
-	vec3 skyHorizon = horizonDay * dayBlend
-	+ vec3(1.0, 0.45, 0.15) * twilightBlend
-	+ vec3(0.04, 0.06, 0.10) * nightBlend;
-
-	vec3 customSky = mix(skyHorizon, skyZenith, pow(upDot, 0.6));
+	vec3 vanillaSky = mix(fogColor, skyColor, clamp(upDot * 2.5, 0.0, 1.0));
 
 	vec3 rightV = normalize(cross(worldLightVector, vec3(0.0, 1.0, 0.0)));
 	if (abs(worldLightVector.y) > 0.99) rightV = vec3(1.0, 0.0, 0.0);
@@ -202,12 +321,12 @@ void main() {
 	float squareBody = (1.0 - smoothstep(sSize - sEdge, sSize, abs(dx))) * (1.0 - smoothstep(sSize - sEdge, sSize, abs(dy))) * step(0.0, dz);
 
 	vec3 celestialColor = mix(vec3(1.2, 1.1, 1.0), vec3(0.4, 0.6, 1.0), nightBlend);
-	float sunGlow = pow(max(dz, 0.0), mix(60.0, 40.0, hotBiome * dayBlend)) * mix(0.8, 0.25, nightBlend);
+	float sunGlow = pow(max(dz, 0.0), mix(60.0, 40.0, dayBlend)) * mix(0.8, 0.25, nightBlend);
 
-	customSky += (squareBody + sunGlow) * celestialColor;
+	vanillaSky += (squareBody + sunGlow) * celestialColor;
 
 	if (rawDepth == 1.0) {
-		color.rgb = ACESFilm(customSky * 0.85);
+		color.rgb = ACESFilm(vanillaSky * 0.85);
 		return;
 	}
 
@@ -218,7 +337,7 @@ void main() {
 	fogBase = mix(fogBase, 0.001, nightBlend);
 
 	float atmoFogFactor = exp(-pow(distanceToPlayer * fogBase, 2.0));
-	color.rgb = mix(customSky, color.rgb, clamp(atmoFogFactor, 0.0, 1.0));
+	color.rgb = mix(vanillaSky, color.rgb, clamp(atmoFogFactor, 0.0, 1.0));
 
 	color.rgb = ACESFilm(color.rgb * 0.85);
 }
