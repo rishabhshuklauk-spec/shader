@@ -7,6 +7,8 @@ out vec2 texcoord;
 out vec2 lmcoord;
 out vec4 glcolor;
 out vec3 normal;
+out vec3 viewPos;
+out vec3 worldPos;
 
 void main() {
     texcoord = (gl_TextureMatrix[0] * gl_MultiTexCoord0).xy;
@@ -15,13 +17,16 @@ void main() {
     normal   = normalize(gl_NormalMatrix * gl_Normal);
 
     vec4 position = gl_Vertex;
-    vec3 worldPos = position.xyz + cameraPosition;
+    worldPos = position.xyz + cameraPosition;
 
     if (gl_Normal.y > 0.8) {
-        float wave = sin(worldPos.x * 1.5 + frameTimeCounter * 2.0) * 0.05 +
-        cos(worldPos.z * 1.5 + frameTimeCounter * 1.6) * 0.05;
+        float wave = sin(worldPos.x * 1.8 + frameTimeCounter * 1.0) * 0.015 +
+                     cos(worldPos.z * 1.4 + frameTimeCounter * 0.8) * 0.015 +
+                     sin(worldPos.x * 0.6 + worldPos.z * 0.8 + frameTimeCounter * 0.5) * 0.01;
         position.y += wave;
     }
 
-    gl_Position = gl_ModelViewProjectionMatrix * position;
+    vec4 viewPosition = gl_ModelViewMatrix * position;
+    viewPos = viewPosition.xyz;
+    gl_Position = gl_ProjectionMatrix * viewPosition;
 }

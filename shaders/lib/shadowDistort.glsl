@@ -1,8 +1,7 @@
 vec3 distortShadowClipPos(vec3 shadowClipPos) {
     float distortionFactor = length(shadowClipPos.xy);
-    distortionFactor += 0.1;
-
+    distortionFactor = distortionFactor * 0.75 + 0.25;
     shadowClipPos.xy /= distortionFactor;
-    shadowClipPos.z *= 0.5;
+    shadowClipPos.z *= 0.2;
     return shadowClipPos;
 }
