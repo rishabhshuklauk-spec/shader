@@ -17,6 +17,7 @@ in vec4 shadowClipPos;
 in float blockId;
 
 layout(location = 0) out vec4 colortex0;
+layout(location = 1) out vec4 colortex1;
 
 void main() {
     vec4 albedo = texture(texture, texcoord);
@@ -83,4 +84,5 @@ void main() {
     }
 
     colortex0 = vec4(max(finalColor, vec3(0.0)), albedo.a);
+    colortex1 = vec4(0.0);
 }

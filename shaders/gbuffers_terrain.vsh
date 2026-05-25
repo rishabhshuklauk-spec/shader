@@ -23,8 +23,10 @@ void main() {
     blockId  = mc_Entity.x;
 
     vec4 position = gl_Vertex;
-    vec3 worldPos = position.xyz + cameraPosition;
-    float phase   = floor(worldPos.x) * 1.7 + floor(worldPos.z) * 4.3;
+    vec4 viewPosPlayer = gl_ModelViewMatrix * position;
+    vec4 playerPos = gbufferModelViewInverse * viewPosPlayer;
+    vec3 worldPos = playerPos.xyz + cameraPosition;
+    float phase   = floor(worldPos.x + 0.001) * 1.7 + floor(worldPos.z + 0.001) * 4.3;
     float t       = frameTimeCounter;
 
     if (abs(mc_Entity.x - 10001.0) < 0.5) {
@@ -40,6 +42,6 @@ void main() {
 
     vec4 viewPos   = gl_ModelViewMatrix * position;
     gl_Position    = gl_ProjectionMatrix * viewPos;
-    vec4 playerPos = gbufferModelViewInverse * viewPos;
+    playerPos = gbufferModelViewInverse * viewPos;
     shadowClipPos  = shadowProjection * (shadowModelView * playerPos);
 }

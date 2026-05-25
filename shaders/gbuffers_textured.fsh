@@ -11,6 +11,7 @@ in vec4 glcolor;
 in vec3 normal;
 
 layout(location = 0) out vec4 colortex0;
+layout(location = 1) out vec4 colortex1;
 
 void main() {
 	vec4 albedo = texture(texture, texcoord) * glcolor;
@@ -41,4 +42,5 @@ void main() {
 	vec3 finalColor = linearAlbedo * (ambient + sunColor);
 
 	colortex0 = vec4(max(finalColor, vec3(0.0)), albedo.a);
+    colortex1 = vec4(0.0);
 }
