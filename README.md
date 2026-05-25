@@ -16,5 +16,4 @@ A custom Minecraft shader pack built for the Iris/Optifine shader pipeline, focu
 ## How to Contribute
 1.  **Fork the repository** and clone it locally.
 2.  **Make your changes**: Modify the GLSL code in the `.fsh` (fragment) and `.vsh` (vertex) files.
-3.  **Test**: Load the folder as a shader pack in Minecraft using the [Iris Shaders](https://irisshaders.dev/) mod. Use `F3 + R` to hot-reload the shader in-game.
-4.  **Submit a Pull Request**: Detail your changes and provide before/after screenshots if applicable.
+3.  **Test**: Load the folder as a shader pack in Minecraft using the [Iris Shaders](https://irisshaders.dev/) mod. Use `R` to reload the shader in-game.
