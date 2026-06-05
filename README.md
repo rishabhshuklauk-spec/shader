@@ -1,19 +1,11 @@
 # Custom Minecraft Shader
-
-A custom Minecraft shader pack built for the Iris/Optifine shader pipeline, focusing on realistic, high-performance water rendering and atmospheric lighting.
-
+A custom Minecraft shader pack built for  IriS, focusing on colours and performance
 ## Tech Stack
-*   **GLSL (OpenGL Shading Language)**: Core shading logic for fragment and vertex rendering.
-*   **Optifine / Iris API**: Pipeline integration for Minecraft rendering buffers.
-*   **Minecraft**: Target engine.
-
+I've added exponential tonemapping, Dynamic skybox, procedural clouds, real time shadows and colour grading.
 ## Features
-*   **Volumetric Water Physics**: Accurate depth reconstruction using inverse projection matrices, fixing Snell's window and Total Internal Reflection (TIR).
-*   **Organic Wave Normals**: Custom 2D Simplex Noise implementation for artifact-free, non-repeating water ripples without grid or checkerboard artifacts.
-*   **Depth-Based Absorption**: Uniform light transmittance through water volumes for natural color blending without harsh hue shifting.
-*   **Soft Specular Reflections**: Physically-based sun and moon reflections mapped to wave normals.
-
-## How to Contribute
-1.  **Fork the repository** and clone it locally.
-2.  **Make your changes**: Modify the GLSL code in the `.fsh` (fragment) and `.vsh` (vertex) files.
-3.  **Test**: Load the folder as a shader pack in Minecraft using the [Iris Shaders](https://irisshaders.dev/) mod. Use `R` to reload the shader in-game.
+It has colour grading for vibrance and custom clouds. The sky also changes colour based on the time of day and the position of the sun.
+## How to add/play
+1) fork repo
+2) change files
+3) run .\gradlew runShaderClient
+4) to play just take zip file
